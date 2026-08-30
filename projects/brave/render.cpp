@@ -7,9 +7,10 @@
 // with the recurrent cache tensors the model needs alongside its single
 // audio input/output.
 //
-// The model isn't loaded from a fixed path in the source -- it's passed at
-// runtime via --qnn-model (plus --qnn-backend and --qnn-system), so it must
-// be present on the target device when you run it.
+// --qnn-backend and --qnn-system are passed at runtime, since those paths
+// are environment-specific. The model itself is a single fixed asset for
+// this project (brave_acoustic_drumset_1024.dlc, see kModelFile below) and
+// is expected next to drums.wav in the current working directory.
 //
 // This code example uses this sound from freesound:
 // TECH DRUMS.wav by shpira -- https://freesound.org/s/323623/ -- License: Creative Commons 0
@@ -43,7 +44,6 @@
 // App parameters set by CLI args
 std::string backendPath;
 std::string systemLibraryPath;
-std::string modelPath;
 
 std::unique_ptr<ar::qnn::QnnModel> model;
 
@@ -61,6 +61,10 @@ const int g_audioOutputIndex = 47;
 
 // This model's batch size is fixed at export time to this period size.
 const unsigned int kExpectedPeriodSize = 1024;
+
+// The model is a single fixed asset for this project, expected in the
+// current working directory (same as drums.wav).
+const char *kModelFile = "brave_acoustic_drumset_1024.dlc";
 
 // One flattened float buffer per input/output tensor of the graph.
 float **g_inputDataBuffers = nullptr;
@@ -80,18 +84,16 @@ void showHelp()
     std::cout
         << "\nDESCRIPTION:\n"
         << "------------\n"
-        << "Streams drums.wav through a QNN model, period by period.\n"
+        << "Streams drums.wav through the bundled brave_acoustic_drumset_1024.dlc\n"
+        << "QNN model, period by period. Both files are expected in the current\n"
+        << "working directory.\n"
         << "\n\n"
         << "REQUIRED ARGUMENTS:\n"
         << "-------------------\n"
         << "  --qnn-backend      <FILE>   Path to a QNN backend to execute the model.\n"
         << "\n"
-        << "  --qnn-model        <FILE>   Path to the model: a .dlc container or a\n"
-        << "                              .bin context binary. Must be a brave model\n"
-        << "                              exported with buffer = 1024. Requires --qnn-system.\n"
-        << "\n"
         << "  --qnn-system       <FILE>   Path to the QNN System library (libQnnSystem.so),\n"
-        << "                              needed when loading a model from a DLC.\n"
+        << "                              needed to load the model from its .dlc container.\n"
         << "\n\n"
         << "OPTIONAL ARGUMENTS:\n"
         << "-------------------\n"
@@ -106,8 +108,7 @@ void processCommandLine(char **argv)
     // short-form may easily clash with the many arguments dealt with by main
     enum
     {
-        OPT_QNN_MODEL = 256,
-        OPT_QNN_BACKEND,
+        OPT_QNN_BACKEND = 256,
         OPT_QNN_SYSTEM,
         OPT_PROJECT_HELP,
     };
@@ -115,7 +116,6 @@ void processCommandLine(char **argv)
     int c;
     struct optparse opts;
     struct optparse_long long_options[] = {
-        {"qnn-model", OPT_QNN_MODEL, OPTPARSE_REQUIRED},
         {"qnn-backend", OPT_QNN_BACKEND, OPTPARSE_REQUIRED},
         {"qnn-system", OPT_QNN_SYSTEM, OPTPARSE_REQUIRED},
         {"project-help", OPT_PROJECT_HELP, OPTPARSE_NONE},
@@ -126,9 +126,6 @@ void processCommandLine(char **argv)
     {
         switch (c)
         {
-        case OPT_QNN_MODEL:
-            modelPath = opts.optarg;
-            break;
         case OPT_QNN_BACKEND:
             backendPath = opts.optarg;
             break;
@@ -160,13 +157,13 @@ int setup(struct audio_ctx *ctx, void *user_data)
 
     processCommandLine((char **)user_data);
 
-    if (modelPath.empty() || backendPath.empty() || systemLibraryPath.empty())
+    if (backendPath.empty() || systemLibraryPath.empty())
     {
-        std::cerr << "brave: --qnn-model, --qnn-backend and --qnn-system are all required\n";
+        std::cerr << "brave: --qnn-backend and --qnn-system are both required\n";
         return EXIT_FAILURE;
     }
 
-    model.reset(new ar::qnn::QnnModel(backendPath, modelPath, systemLibraryPath));
+    model.reset(new ar::qnn::QnnModel(backendPath, kModelFile, systemLibraryPath));
     if (!model->load())
     {
         std::cerr << "brave: failed to load model\n";
