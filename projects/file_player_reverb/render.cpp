@@ -12,7 +12,7 @@
 #include <cstdio>
 
 const char *kInputFile = "dry_percussions.wav";
-const float kInputGain = 0.4f;   // IR coefficients sum to ~82 in absolute
+const float kInputGain = 0.1f;   // IR coefficients sum to ~82 in absolute
                                   // value; input would clip at full-scale
 
 Fir fir;
